@@ -1,37 +1,11 @@
-# dependencies
-node_modules/
-.pnpm-store/
-
-# builds
-dist/
-build/
-out/
-.next/
-*.tsbuildinfo
-
-# env
+node_modules
+.next
+dist
+.turbo
+coverage
 .env
-.env.*
-!.env.example
+.env.local
+*.log
+apps/api/prisma/dev.db
+uploads
 
-# test + coverage
-coverage/
-.vitest/
-test-results/
-playwright-report/
-
-# prisma
-apps/api/prisma/migrations/dev.db*
-
-# local infra
-.docker-data/
-
-# editors + os
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/*
-!.vscode/extensions.json
-
-# prisma client output
-apps/api/src/generated/

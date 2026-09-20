@@ -1,0 +1,2 @@
+export function profitFactor(values: number[]) { const wins = values.filter((value) => value > 0).reduce((sum, value) => sum + value, 0); const losses = Math.abs(values.filter((value) => value < 0).reduce((sum, value) => sum + value, 0)); return losses === 0 ? 0 : wins / losses; }
+export function maximumDrawdown(values: number[]) { let equity = 0, peak = 0, drawdown = 0; for (const value of values) { equity += value; peak = Math.max(peak, equity); drawdown = Math.min(drawdown, equity - peak); } return drawdown; }

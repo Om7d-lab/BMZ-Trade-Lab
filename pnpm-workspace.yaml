@@ -1,13 +1,2 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
-
-onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
-  - '@tailwindcss/oxide'
-  - 'prisma'
-  - 'sharp'
-  - 'unrs-resolver'
-  - 'esbuild'
-  - '@swc/core'
+  - apps/*

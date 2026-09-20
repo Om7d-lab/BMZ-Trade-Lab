@@ -1,0 +1,16 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { AccountKind, AssetClass, RuleStage } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+@Injectable() export class WorkspaceService {
+  constructor(private prisma: PrismaService) {}
+  accounts(workspaceId: string) { return this.prisma.account.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' } }); }
+  createAccount(workspaceId: string, data: { name: string; broker: string; assetClass: AssetClass; kind?: AccountKind; currency?: string; initialBalance?: number }) { return this.prisma.account.create({ data: { workspaceId, name: data.name, broker: data.broker, assetClass: data.assetClass, kind: data.kind ?? 'LIVE', currency: data.currency ?? 'USD', initialBalance: data.initialBalance ?? 0 } }); }
+  notes(workspaceId: string, date?: string) { return this.prisma.note.findMany({ where: { workspaceId, deletedAt: null, ...(date ? { tradingDate: new Date(date) } : {}) }, orderBy: { updatedAt: 'desc' } }); }
+  async upsertDailyNote(workspaceId: string, data: { date: string; title: string; content: unknown }) { const tradingDate = new Date(data.date); const existing = await this.prisma.note.findFirst({ where: { workspaceId, tradingDate, folder: 'Daily Journal', deletedAt: null } }); return existing ? this.prisma.note.update({ where: { id: existing.id }, data: { title: data.title, content: data.content as never } }) : this.prisma.note.create({ data: { workspaceId, title: data.title, content: data.content as never, tradingDate, folder: 'Daily Journal' } }); }
+  playbooks(workspaceId: string) { return this.prisma.playbook.findMany({ where: { workspaceId, archived: false }, include: { rules: { orderBy: { position: 'asc' } }, _count: { select: { trades: true } } } }); }
+  createPlaybook(workspaceId: string, input: { name: string; description?: string; rules?: string[] }) { return this.prisma.playbook.create({ data: { workspaceId, name: input.name, description: input.description, rules: { create: (input.rules ?? []).map((title, position) => ({ title, position })) } }, include: { rules: true } }); }
+  rules(workspaceId: string) { return this.prisma.progressRule.findMany({ where: { workspaceId }, include: { completions: { orderBy: { tradingDate: 'desc' }, take: 35 } }, orderBy: { stage: 'asc' } }); }
+  createRule(workspaceId: string, input: { stage: RuleStage; title: string; activeDays?: number[]; required?: boolean }) { return this.prisma.progressRule.create({ data: { workspaceId, stage: input.stage, title: input.title, activeDays: input.activeDays ?? [1,2,3,4,5], required: input.required ?? false } }); }
+  async completeRule(workspaceId: string, ruleId: string, date: string, completed: boolean, lock = false) { const rule = await this.prisma.progressRule.findFirst({ where: { id: ruleId, workspaceId } }); if (!rule) throw new NotFoundException('Rule not found'); const tradingDate = new Date(date); return this.prisma.ruleCompletion.upsert({ where: { ruleId_tradingDate: { ruleId, tradingDate } }, update: { completed, ...(lock ? { lockedAt: new Date() } : {}) }, create: { ruleId, tradingDate, completed, ...(lock ? { lockedAt: new Date() } : {}) } }); }
+}
+
