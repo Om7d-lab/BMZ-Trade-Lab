@@ -8,4 +8,4 @@ coverage
 *.log
 apps/api/prisma/dev.db
 uploads
-
+*.tsbuildinfo
