@@ -1,0 +1,278 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  MENTOR
+  VIEWER
+}
+
+enum AssetClass {
+  STOCK
+  FUTURE
+  FOREX
+  CRYPTO
+  OPTION
+}
+
+enum AccountKind {
+  LIVE
+  PAPER
+  PROP
+  BACKTEST
+}
+
+enum TradeSide {
+  LONG
+  SHORT
+}
+
+enum TradeStatus {
+  OPEN
+  CLOSED
+}
+
+enum ImportStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  ROLLED_BACK
+}
+
+enum RuleStage {
+  PREPARE
+  TRADE
+  REFLECT
+}
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  passwordHash    String
+  name            String
+  locale          String       @default("en")
+  timezone        String       @default("UTC")
+  currency        String       @default("USD")
+  emailVerifiedAt DateTime?
+  createdAt       DateTime     @default(now())
+  memberships     Membership[]
+  auditEvents     AuditEvent[]
+}
+
+model Workspace {
+  id          String         @id @default(cuid())
+  name        String
+  slug        String         @unique
+  plan        String         @default("FREE")
+  createdAt   DateTime       @default(now())
+  memberships Membership[]
+  accounts    Account[]
+  trades      Trade[]
+  tags        Tag[]
+  playbooks   Playbook[]
+  notes       Note[]
+  rules       ProgressRule[]
+  imports     ImportJob[]
+  auditEvents AuditEvent[]
+}
+
+model Membership {
+  id          String         @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        MembershipRole @default(MEMBER)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model Account {
+  id             String      @id @default(cuid())
+  workspaceId    String
+  name           String
+  broker         String
+  assetClass     AssetClass
+  kind           AccountKind @default(LIVE)
+  currency       String      @default("USD")
+  initialBalance Decimal     @default(0) @db.Decimal(18, 2)
+  createdAt      DateTime    @default(now())
+  workspace      Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  trades         Trade[]
+}
+
+model Trade {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  accountId    String
+  symbol       String
+  assetClass   AssetClass
+  side         TradeSide
+  status       TradeStatus     @default(CLOSED)
+  openedAt     DateTime
+  closedAt     DateTime?
+  quantity     Decimal         @db.Decimal(18, 6)
+  entryPrice   Decimal         @db.Decimal(18, 6)
+  exitPrice    Decimal?        @db.Decimal(18, 6)
+  stopLoss     Decimal?        @db.Decimal(18, 6)
+  targetPrice  Decimal?        @db.Decimal(18, 6)
+  grossPnl     Decimal         @default(0) @db.Decimal(18, 2)
+  fees         Decimal         @default(0) @db.Decimal(18, 2)
+  netPnl       Decimal         @default(0) @db.Decimal(18, 2)
+  rMultiple    Decimal?        @db.Decimal(10, 3)
+  rating       Int?
+  reviewed     Boolean         @default(false)
+  note         String?
+  importedById String?
+  createdAt    DateTime        @default(now())
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account      Account         @relation(fields: [accountId], references: [id])
+  executions   Execution[]
+  tags         TradeTag[]
+  playbooks    TradePlaybook[]
+
+  @@index([workspaceId, openedAt])
+  @@index([workspaceId, symbol])
+}
+
+model Execution {
+  id         String    @id @default(cuid())
+  tradeId    String
+  side       TradeSide
+  price      Decimal   @db.Decimal(18, 6)
+  quantity   Decimal   @db.Decimal(18, 6)
+  executedAt DateTime
+  commission Decimal   @default(0) @db.Decimal(18, 2)
+  trade      Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+}
+
+model Tag {
+  id          String     @id @default(cuid())
+  workspaceId String
+  category    String
+  name        String
+  color       String     @default("#2DD4BF")
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  trades      TradeTag[]
+
+  @@unique([workspaceId, category, name])
+}
+
+model TradeTag {
+  tradeId String
+  tagId   String
+  trade   Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([tradeId, tagId])
+}
+
+model Playbook {
+  id          String          @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  color       String          @default("#14B8A6")
+  archived    Boolean         @default(false)
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  rules       PlaybookRule[]
+  trades      TradePlaybook[]
+}
+
+model PlaybookRule {
+  id         String   @id @default(cuid())
+  playbookId String
+  title      String
+  required   Boolean  @default(true)
+  position   Int      @default(0)
+  playbook   Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+}
+
+model TradePlaybook {
+  tradeId    String
+  playbookId String
+  ruleChecks Json?
+  trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  playbook   Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+
+  @@id([tradeId, playbookId])
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  workspaceId String
+  title       String
+  content     Json
+  folder      String    @default("Daily Journal")
+  tradeId     String?
+  tradingDate DateTime?
+  tags        Json?
+  deletedAt   DateTime?
+  shareToken  String?   @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model ProgressRule {
+  id          String           @id @default(cuid())
+  workspaceId String
+  stage       RuleStage
+  title       String
+  activeDays  Json
+  required    Boolean          @default(false)
+  enabled     Boolean          @default(true)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  completions RuleCompletion[]
+}
+
+model RuleCompletion {
+  id          String       @id @default(cuid())
+  ruleId      String
+  tradingDate DateTime
+  completed   Boolean      @default(false)
+  lockedAt    DateTime?
+  rule        ProgressRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, tradingDate])
+}
+
+model ImportJob {
+  id             String       @id @default(cuid())
+  workspaceId    String
+  accountId      String?
+  source         String
+  fileName       String
+  status         ImportStatus @default(QUEUED)
+  mapping        Json?
+  insertedCount  Int          @default(0)
+  duplicateCount Int          @default(0)
+  errorCount     Int          @default(0)
+  createdAt      DateTime     @default(now())
+  completedAt    DateTime?
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id          String     @id @default(cuid())
+  workspaceId String?
+  actorId     String?
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor       User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+}
